@@ -3269,12 +3269,11 @@ def main():
 
     web_thread.start()
 
-application = (
-    Application.builder()
-    .token(TOKEN)
-    .build()
-)
-
+    application = (
+        Application.builder()
+        .token(TOKEN)
+        .build()
+    )
     # -------------------------
     # USER COMMANDS
     # -------------------------
