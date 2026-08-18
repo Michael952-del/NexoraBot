@@ -28,7 +28,7 @@ from telegram.ext import (
 # =========================================================
 
 TOKEN = os.environ["TOKEN"]
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -863,7 +863,7 @@ async def ai_command(
         )
 
         response = client.responses.create(
-            model="gpt-5-mini",
+            model="gpt-5.6-luna",
             instructions=(
                 "Ты NEXORA AI — дружелюбный помощник "
                 "в Telegram-боте. "
