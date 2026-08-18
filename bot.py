@@ -13,8 +13,9 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
+    MessageHandler,
+    filters,
 )
-
 # =========================================================
 # НАСТРОЙКИ
 # =========================================================
@@ -838,6 +839,10 @@ def main_menu():
 
     return InlineKeyboardMarkup([
 
+def main_menu():
+
+    return InlineKeyboardMarkup([
+
         [
             InlineKeyboardButton(
                 "🎮 Игры",
@@ -845,36 +850,41 @@ def main_menu():
             ),
 
             InlineKeyboardButton(
-                "👤 Профиль",
-                callback_data="profile"
+                "🤖 AI",
+                callback_data="ai"
             ),
         ],
 
         [
+            InlineKeyboardButton(
+                "👤 Профиль",
+                callback_data="profile"
+            ),
+
             InlineKeyboardButton(
                 "🎁 Бонус",
                 callback_data="daily"
             ),
+        ],
 
+        [
             InlineKeyboardButton(
                 "📋 Задания",
                 callback_data="quests"
             ),
-        ],
 
-        [
             InlineKeyboardButton(
                 "🛒 Магазин",
                 callback_data="shop"
             ),
+        ],
 
+        [
             InlineKeyboardButton(
                 "🎒 Инвентарь",
                 callback_data="inventory"
             ),
-        ],
 
-        [
             InlineKeyboardButton(
                 "🏅 Достижения",
                 callback_data="achievements"
@@ -959,6 +969,143 @@ def back_button(target="main"):
 # =========================================================
 
 async def ai_command(
+
+# =========================================================
+# AI CHAT MODE
+# =========================================================
+
+async def ai_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+
+    user = query.from_user
+
+    if is_banned(user.id):
+        await query.edit_message_text(
+            "⛔ Твой доступ к боту заблокирован."
+        )
+        return
+
+    ensure_user(user)
+
+    context.user_data["ai_mode"] = True
+
+    await query.edit_message_text(
+        """
+🤖 <b>NEXORA AI</b>
+
+AI режим включён.
+
+Напиши мне любой вопрос 👇
+
+Например:
+
+💬 Расскажи интересный факт
+💬 Объясни фотосинтез
+💬 Помоги с Python
+💬 Придумай идею для игры
+
+Я отвечу тебе прямо здесь.
+
+Чтобы выйти из AI, нажми кнопку ниже.
+""",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⬅️ Выйти из AI",
+                    callback_data="main"
+                )
+            ]
+        ])
+    )
+
+
+async def ai_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    if not context.user_data.get("ai_mode"):
+        return
+
+    user = update.effective_user
+
+    if is_banned(user.id):
+        await update.message.reply_text(
+            "⛔ Твой доступ к боту заблокирован."
+        )
+        return
+
+    ensure_user(user)
+
+    prompt = update.message.text.strip()
+
+    if not prompt:
+        return
+
+    try:
+
+        # Показываем пользователю, что AI думает.
+        thinking_message = await update.message.reply_text(
+            "🤖 Думаю..."
+        )
+
+        response = client.responses.create(
+            model="gpt-5.6",
+            instructions=(
+                "Ты NEXORA AI — дружелюбный AI-помощник "
+                "в Telegram-боте. "
+                "Отвечай понятно, полезно и кратко. "
+                "Отвечай на языке пользователя."
+            ),
+            input=prompt
+        )
+
+        answer = response.output_text
+
+        if not answer:
+            answer = "❌ AI не смог сформировать ответ."
+
+        try:
+            await thinking_message.delete()
+        except Exception:
+            pass
+
+        # Telegram ограничивает размер сообщения.
+        max_length = 4000
+
+        for i in range(0, len(answer), max_length):
+
+            await update.message.reply_text(
+                answer[i:i + max_length],
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ Выйти из AI",
+                            callback_data="main"
+                        )
+                    ]
+                ])
+            )
+
+    except Exception as e:
+
+        print(
+            "AI CHAT ERROR:",
+            repr(e)
+        )
+
+        await update.message.reply_text(
+            """
+❌ <b>Ошибка AI</b>
+
+Не удалось получить ответ.
+
+Проверь OPENAI_API_KEY на Render.
+""",
+            parse_mode="HTML"
+        )
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
@@ -1118,6 +1265,19 @@ async def callback(
     ensure_user(user)
 
     action = query.data
+
+    # =====================================================
+    # AI
+    # =====================================================
+
+    if action == "ai":
+
+        await ai_button(
+            update,
+            context
+        )
+
+        return
 
     # =====================================================
     # MAIN
@@ -3414,6 +3574,17 @@ def main():
         CommandHandler(
             "broadcast",
             broadcast
+        )
+    )
+
+    # -------------------------
+    # TEXT / AI
+    # -------------------------
+
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            ai_message
         )
     )
 
