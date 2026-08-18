@@ -1076,20 +1076,18 @@ async def ai_message(
                 ])
             )
 
-    except Exception as e:
-        print("AI CHAT ERROR:", repr(e))
+except Exception as e:
 
-        if thinking:
-            try:
-                await thinking.delete()
-            except Exception:
-                pass
+    print("====================================")
+    print("OPENAI ERROR:")
+    print(repr(e))
+    print("====================================")
 
-        await update.message.reply_text(
-            "❌ Не удалось получить ответ от AI.\n\n"
-            "Проверь OPENAI_API_KEY и OPENAI_MODEL "
-            "на Render."
-        )
+    await update.message.reply_text(
+        "❌ Ошибка AI.\n\n"
+        f"<code>{str(e)[:1000]}</code>",
+        parse_mode="HTML"
+    )
 
 
 # =========================================================
