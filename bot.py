@@ -1146,6 +1146,131 @@ async def ai_message(
             "❌ Не удалось получить ответ от AI."
         )
 
+# =========================================================
+# AI BUTTON
+# =========================================================
+
+    async def ai_button(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    query = update.callback_query
+    user = query.from_user
+
+    if is_banned(user.id):
+        await query.edit_message_text(
+            "⛔ Твой доступ к боту заблокирован."
+        )
+        return
+
+    ensure_user(user)
+
+    context.user_data["ai_mode"] = True
+
+    await query.edit_message_text(
+        """
+🤖 <b>NEXORA AI</b>
+
+AI режим включён.
+
+Напиши свой вопрос 👇
+
+Например:
+
+💬 Расскажи интересный факт
+💬 Объясни Python
+💬 Помоги с домашним заданием
+💬 Придумай идею для игры
+
+Я отвечу прямо здесь.
+
+Нажми кнопку ниже, чтобы выйти.
+""",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "⬅️ Выйти из AI",
+                    callback_data="main"
+                )
+            ]
+        ])
+    )
+
+
+async def ai_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    if not context.user_data.get("ai_mode"):
+        return
+
+    user = update.effective_user
+
+    if is_banned(user.id):
+        await update.message.reply_text(
+            "⛔ Твой доступ к боту заблокирован."
+        )
+        return
+
+    ensure_user(user)
+
+    prompt = update.message.text.strip()
+
+    if not prompt:
+        return
+
+    try:
+
+        thinking = await update.message.reply_text(
+            "🤖 Думаю..."
+        )
+
+        response = client.responses.create(
+            model="gpt-5.6",
+            instructions=(
+                "Ты NEXORA AI. "
+                "Ты дружелюбный помощник Telegram-бота. "
+                "Отвечай понятно и полезно. "
+                "Отвечай на языке пользователя."
+            ),
+            input=prompt
+        )
+
+        answer = response.output_text
+
+        try:
+            await thinking.delete()
+        except Exception:
+            pass
+
+        if not answer:
+            answer = "❌ AI не дал ответ."
+
+        await update.message.reply_text(
+            f"🤖 <b>NEXORA AI</b>\n\n{answer}",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "⬅️ Выйти из AI",
+                        callback_data="main"
+                    )
+                ]
+            ])
+        )
+
+    except Exception as e:
+
+        print("AI CHAT ERROR:", repr(e))
+
+        await update.message.reply_text(
+            "❌ Ошибка при обращении к AI.\n\n"
+            "Проверь OPENAI_API_KEY на Render."
+        )
+
 
 # =========================================================
 # START
