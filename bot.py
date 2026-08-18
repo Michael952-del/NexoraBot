@@ -884,9 +884,12 @@ def back_button(target="main"):
 # AI
 # =========================================================
 
+AI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6")
+
+
 async def ai_command(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
     user = update.effective_user
 
@@ -908,17 +911,55 @@ async def ai_command(
 
     prompt = " ".join(context.args)
 
-    answer = await get_ai_answer(prompt)
+    try:
+        thinking = await update.message.reply_text(
+            "🤖 Думаю..."
+        )
 
-    await update.message.reply_text(
-        f"🤖 <b>NEXORA AI</b>\n\n{answer}",
-        parse_mode="HTML",
-    )
+        response = client.responses.create(
+            model=AI_MODEL,
+            instructions=(
+                "Ты NEXORA AI — дружелюбный помощник "
+                "в Telegram-боте. "
+                "Отвечай понятно, полезно и не слишком длинно. "
+                "Отвечай на языке пользователя."
+            ),
+            input=prompt
+        )
+
+        answer = response.output_text
+
+        if not answer:
+            answer = "❌ AI не смог сформировать ответ."
+
+        try:
+            await thinking.delete()
+        except Exception:
+            pass
+
+        await update.message.reply_text(
+            f"🤖 <b>NEXORA AI</b>\n\n{answer}",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        print("AI COMMAND ERROR:", repr(e))
+
+        try:
+            await thinking.delete()
+        except Exception:
+            pass
+
+        await update.message.reply_text(
+            "❌ Не удалось получить ответ от AI.\n\n"
+            "Проверь OPENAI_API_KEY и OPENAI_MODEL "
+            "на Render."
+        )
 
 
 async def ai_button(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
     query = update.callback_query
     user = query.from_user
@@ -949,62 +990,24 @@ AI режим включён.
 💬 Придумай идею для игры
 
 Я отвечу прямо здесь.
+
+Чтобы выйти из AI, нажми кнопку ниже.
 """,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
                     "⬅️ Выйти из AI",
-                    callback_data="main",
+                    callback_data="main"
                 )
             ]
-        ]),
+        ])
     )
-
-
-async def get_ai_answer(prompt):
-    if not OPENAI_API_KEY or client is None:
-        return (
-            "❌ OPENAI_API_KEY не настроен.\n\n"
-            "Добавь OPENAI_API_KEY в Environment "
-            "на Render."
-        )
-
-    try:
-        response = client.responses.create(
-            model=OPENAI_MODEL,
-            instructions=(
-                "Ты NEXORA AI — дружелюбный помощник "
-                "в Telegram-боте. "
-                "Отвечай понятно, полезно и достаточно кратко. "
-                "Отвечай на языке пользователя."
-            ),
-            input=prompt,
-        )
-
-        answer = response.output_text
-
-        if not answer:
-            return "❌ AI не вернул текстовый ответ."
-
-        return answer
-
-    except Exception as e:
-        print(
-            "OPENAI ERROR:",
-            repr(e),
-        )
-
-        return (
-            "❌ Не удалось получить ответ от AI.\n\n"
-            "Проверь OPENAI_API_KEY и доступность "
-            f"модели {OPENAI_MODEL}."
-        )
 
 
 async def ai_message(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
     if not context.user_data.get("ai_mode"):
         return
@@ -1027,30 +1030,65 @@ async def ai_message(
     if not prompt:
         return
 
-    thinking = await update.message.reply_text(
-        "🤖 Думаю..."
-    )
-
-    answer = await get_ai_answer(prompt)
+    thinking = None
 
     try:
-        await thinking.delete()
-    except Exception:
-        pass
+        thinking = await update.message.reply_text(
+            "🤖 Думаю..."
+        )
 
-    max_length = 4000
+        response = client.responses.create(
+            model=AI_MODEL,
+            instructions=(
+                "Ты NEXORA AI — дружелюбный AI-помощник "
+                "в Telegram-боте. "
+                "Отвечай понятно, полезно и кратко. "
+                "Отвечай на языке пользователя."
+            ),
+            input=prompt
+        )
 
-    for i in range(0, len(answer), max_length):
+        answer = response.output_text
+
+        if not answer:
+            answer = "❌ AI не дал ответ."
+
+        if thinking:
+            try:
+                await thinking.delete()
+            except Exception:
+                pass
+
+        max_length = 4000
+
+        for i in range(0, len(answer), max_length):
+            await update.message.reply_text(
+                f"🤖 <b>NEXORA AI</b>\n\n"
+                f"{answer[i:i + max_length]}",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ Выйти из AI",
+                            callback_data="main"
+                        )
+                    ]
+                ])
+            )
+
+    except Exception as e:
+        print("AI CHAT ERROR:", repr(e))
+
+        if thinking:
+            try:
+                await thinking.delete()
+            except Exception:
+                pass
+
         await update.message.reply_text(
-            answer[i:i + max_length],
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "⬅️ Выйти из AI",
-                        callback_data="main",
-                    )
-                ]
-            ]),
+            "❌ Не удалось получить ответ от AI.\n\n"
+            "Проверь OPENAI_API_KEY и OPENAI_MODEL "
+            "на Render."
         )
 
 
