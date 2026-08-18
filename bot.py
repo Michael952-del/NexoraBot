@@ -839,10 +839,6 @@ def main_menu():
 
     return InlineKeyboardMarkup([
 
-def main_menu():
-
-    return InlineKeyboardMarkup([
-
         [
             InlineKeyboardButton(
                 "🎮 Игры",
@@ -902,6 +898,7 @@ def main_menu():
                 callback_data="xprating"
             ),
         ],
+
     ])
 
 
