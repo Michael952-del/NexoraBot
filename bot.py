@@ -995,13 +995,16 @@ async def ai_message(
                 ])
             )
 
-    except Exception as e:
-        print("AI CHAT ERROR:", repr(e))
+except Exception as e:
+    print("================================")
+    print("AI CHAT ERROR:")
+    print(repr(e))
+    print("================================")
 
-        await update.message.reply_text(
-            "❌ Ошибка при обращении к AI.\n\n"
-            "Проверь OPENAI_API_KEY на Render."
-        )
+    await update.message.reply_text(
+        "❌ Ошибка AI.\n\n"
+        "Посмотри последние строки Logs на Render."
+    )
 
 
 # =========================================================
