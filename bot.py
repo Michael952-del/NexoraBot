@@ -5,6 +5,7 @@ import asyncio
 import random
 import sqlite3
 from datetime import date, timedelta
+from openai import OpenAI
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -19,6 +20,8 @@ from telegram.ext import (
 # =========================================================
 
 TOKEN = os.environ["TOKEN"]
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # СЮДА ВПИШИ СВОЙ TELEGRAM ID
 # Например:
@@ -950,6 +953,54 @@ def back_button(target="main"):
             )
         ]
     ])
+
+# =========================================================
+# AI
+# =========================================================
+
+async def ai_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+    user = update.effective_user
+
+    if is_banned(user.id):
+        await update.message.reply_text(
+            "⛔ Твой доступ к боту заблокирован."
+        )
+        return
+
+    ensure_user(user)
+
+    if not context.args:
+        await update.message.reply_text(
+            "🤖 Напиши вопрос после команды.\n\n"
+            "Пример:\n"
+            "/ai расскажи интересный факт"
+        )
+        return
+
+    prompt = " ".join(context.args)
+
+    try:
+        response = client.responses.create(
+            model="gpt-5-mini",
+            input=prompt
+        )
+
+        answer = response.output_text
+
+        await update.message.reply_text(
+            f"🤖 <b>NEXORA AI</b>\n\n{answer}",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        print("AI ERROR:", repr(e))
+
+        await update.message.reply_text(
+            "❌ Не удалось получить ответ от AI."
+        )
 
 
 # =========================================================
@@ -3291,6 +3342,13 @@ def main():
             my_id
         )
     )
+
+    application.add_handler(
+    CommandHandler(
+        "ai",
+        ai_command
+    )
+)
 
     # -------------------------
     # ADMIN COMMANDS
