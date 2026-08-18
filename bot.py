@@ -830,7 +830,7 @@ def back_button(target="main"):
 
 
 # =========================================================
-# AI COMMAND
+# AI
 # =========================================================
 
 async def ai_command(
@@ -858,12 +858,27 @@ async def ai_command(
     prompt = " ".join(context.args)
 
     try:
+        thinking = await update.message.reply_text(
+            "🤖 Думаю..."
+        )
+
         response = client.responses.create(
             model="gpt-5-mini",
+            instructions=(
+                "Ты NEXORA AI — дружелюбный помощник "
+                "в Telegram-боте. "
+                "Отвечай понятно, полезно и кратко. "
+                "Отвечай на языке пользователя."
+            ),
             input=prompt
         )
 
         answer = response.output_text
+
+        try:
+            await thinking.delete()
+        except Exception:
+            pass
 
         if not answer:
             answer = "❌ AI не смог сформировать ответ."
@@ -874,11 +889,11 @@ async def ai_command(
         )
 
     except Exception as e:
-        print("AI ERROR:", repr(e))
+        print("AI COMMAND ERROR:", repr(e))
 
         await update.message.reply_text(
             "❌ Не удалось получить ответ от AI.\n\n"
-            "Проверь OPENAI_API_KEY на Render."
+            "Проверь OPENAI_API_KEY и модель OpenAI."
         )
 
 
@@ -909,7 +924,7 @@ async def ai_button(
 
 AI режим включён.
 
-Напиши свой вопрос 👇
+Напиши мне любой вопрос 👇
 
 Например:
 
@@ -918,9 +933,9 @@ AI режим включён.
 💬 Помоги с домашним заданием
 💬 Придумай идею для игры
 
-Я отвечу прямо здесь.
+Я отвечу тебе прямо здесь.
 
-Нажми кнопку ниже, чтобы выйти.
+Чтобы выйти из AI, нажми кнопку ниже.
 """,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
@@ -967,6 +982,12 @@ async def ai_message(
 
         response = client.responses.create(
             model="gpt-5-mini",
+            instructions=(
+                "Ты NEXORA AI — дружелюбный AI-помощник "
+                "в Telegram-боте. "
+                "Отвечай понятно, полезно и кратко. "
+                "Отвечай на языке пользователя."
+            ),
             input=prompt
         )
 
@@ -978,7 +999,7 @@ async def ai_message(
             pass
 
         if not answer:
-            answer = "❌ AI не дал ответ."
+            answer = "❌ AI не смог сформировать ответ."
 
         max_length = 4000
 
@@ -995,17 +1016,13 @@ async def ai_message(
                 ])
             )
 
-except Exception as e:
-    print("================================")
-    print("AI CHAT ERROR:")
-    print(repr(e))
-    print("================================")
+    except Exception as e:
+        print("AI CHAT ERROR:", repr(e))
 
-    await update.message.reply_text(
-        "❌ Ошибка AI.\n\n"
-        "Посмотри последние строки Logs на Render."
-    )
-
+        await update.message.reply_text(
+            "❌ Ошибка при обращении к AI.\n\n"
+            "Проверь OPENAI_API_KEY на Render."
+        )
 
 # =========================================================
 # START
