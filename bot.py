@@ -1,13 +1,18 @@
 import os
 import threading
-from flask import Flask
 import asyncio
 import random
 import sqlite3
 from datetime import date, timedelta
+
+from flask import Flask
 from openai import OpenAI
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -16,17 +21,18 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
+
 # =========================================================
 # НАСТРОЙКИ
 # =========================================================
 
 TOKEN = os.environ["TOKEN"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# СЮДА ВПИШИ СВОЙ TELEGRAM ID
-# Например:
-# ADMIN_IDS = {123456789}
+# ТВОЙ TELEGRAM ID
 ADMIN_IDS = {5329061561}
 
 DB_NAME = "nexora.db"
@@ -61,17 +67,13 @@ def init_db():
             user_id INTEGER PRIMARY KEY,
             username TEXT DEFAULT '',
             first_name TEXT DEFAULT '',
-
             coins INTEGER DEFAULT 100,
             xp INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
-
             games INTEGER DEFAULT 0,
             wins INTEGER DEFAULT 0,
-
             streak INTEGER DEFAULT 0,
             last_daily TEXT DEFAULT '',
-
             daily_games INTEGER DEFAULT 0,
             daily_wins INTEGER DEFAULT 0,
             daily_date TEXT DEFAULT ''
@@ -83,7 +85,6 @@ def init_db():
             user_id INTEGER,
             item_id TEXT,
             amount INTEGER DEFAULT 1,
-
             PRIMARY KEY (user_id, item_id)
         )
     """)
@@ -92,7 +93,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS achievements (
             user_id INTEGER,
             achievement_id TEXT,
-
             PRIMARY KEY (user_id, achievement_id)
         )
     """)
@@ -108,12 +108,7 @@ def init_db():
             user_id INTEGER,
             quest_id TEXT,
             quest_date TEXT,
-
-            PRIMARY KEY (
-                user_id,
-                quest_id,
-                quest_date
-            )
+            PRIMARY KEY (user_id, quest_id, quest_date)
         )
     """)
 
@@ -134,20 +129,16 @@ def ensure_user(user):
         (user.id,)
     )
 
-    exists = cur.fetchone()
-
-    if exists:
+    if cur.fetchone():
         cur.execute("""
             UPDATE users
-            SET username=?,
-                first_name=?
+            SET username=?, first_name=?
             WHERE user_id=?
         """, (
             user.username or "",
             user.first_name or "",
             user.id
         ))
-
     else:
         cur.execute("""
             INSERT INTO users (
@@ -224,12 +215,9 @@ def add_coins(user_id, amount):
 
     cur.execute("""
         UPDATE users
-        SET coins = MAX(coins + ?, 0)
+        SET coins=MAX(coins+?, 0)
         WHERE user_id=?
-    """, (
-        amount,
-        user_id
-    ))
+    """, (amount, user_id))
 
     con.commit()
     con.close()
@@ -257,7 +245,7 @@ def set_coins(user_id, amount):
 
 
 # =========================================================
-# XP / LEVEL
+# XP
 # =========================================================
 
 def add_xp(user_id, amount):
@@ -276,18 +264,13 @@ def add_xp(user_id, amount):
         con.close()
         return False
 
-    old_xp = row[0]
     old_level = row[1]
-
-    new_xp = old_xp + max(0, amount)
-
-    # 100 XP = новый уровень
+    new_xp = row[0] + max(0, amount)
     new_level = (new_xp // 100) + 1
 
     cur.execute("""
         UPDATE users
-        SET xp=?,
-            level=?
+        SET xp=?, level=?
         WHERE user_id=?
     """, (
         new_xp,
@@ -303,13 +286,9 @@ def add_xp(user_id, amount):
 
 def xp_bar(xp):
     current = xp % 100
-
     filled = current // 10
 
-    bar = (
-        "🟩" * filled +
-        "⬜" * (10 - filled)
-    )
+    bar = "🟩" * filled + "⬜" * (10 - filled)
 
     return bar, current
 
@@ -343,10 +322,7 @@ def register_game(user_id, win=False):
                 daily_wins=0,
                 daily_date=?
             WHERE user_id=?
-        """, (
-            today,
-            user_id
-        ))
+        """, (today, user_id))
 
     cur.execute("""
         UPDATE users
@@ -396,7 +372,6 @@ def claim_daily(user_id):
         return False, 0, streak
 
     if last_daily:
-
         try:
             last_date = date.fromisoformat(last_daily)
 
@@ -407,14 +382,10 @@ def claim_daily(user_id):
 
         except ValueError:
             streak = 1
-
     else:
         streak = 1
 
-    reward = DAILY_REWARD + min(
-        streak * 10,
-        150
-    )
+    reward = DAILY_REWARD + min(streak * 10, 150)
 
     cur.execute("""
         UPDATE users
@@ -441,30 +412,14 @@ def claim_daily(user_id):
 # =========================================================
 
 SHOP = {
-    "mystery": (
-        "🎁 Mystery Box",
-        500
-    ),
-
-    "lucky": (
-        "🍀 Lucky Token",
-        300
-    ),
-
-    "badge": (
-        "🏅 Golden Badge",
-        1000
-    ),
-
-    "boost": (
-        "⚡ XP Boost",
-        250
-    ),
+    "mystery": ("🎁 Mystery Box", 500),
+    "lucky": ("🍀 Lucky Token", 300),
+    "badge": ("🏅 Golden Badge", 1000),
+    "boost": ("⚡ XP Boost", 250),
 }
 
 
 def buy_item(user_id, item_id):
-
     if item_id not in SHOP:
         return False, 0
 
@@ -473,11 +428,10 @@ def buy_item(user_id, item_id):
     con = get_db()
     cur = con.cursor()
 
-    cur.execute("""
-        SELECT coins
-        FROM users
-        WHERE user_id=?
-    """, (user_id,))
+    cur.execute(
+        "SELECT coins FROM users WHERE user_id=?",
+        (user_id,)
+    )
 
     row = cur.fetchone()
 
@@ -485,9 +439,7 @@ def buy_item(user_id, item_id):
         con.close()
         return False, 0
 
-    coins = row[0]
-
-    if coins < price:
+    if row[0] < price:
         con.close()
         return False, 0
 
@@ -495,10 +447,7 @@ def buy_item(user_id, item_id):
         UPDATE users
         SET coins=coins-?
         WHERE user_id=?
-    """, (
-        price,
-        user_id
-    ))
+    """, (price, user_id))
 
     cur.execute("""
         INSERT INTO inventory (
@@ -507,13 +456,9 @@ def buy_item(user_id, item_id):
             amount
         )
         VALUES (?, ?, 1)
-
         ON CONFLICT(user_id, item_id)
         DO UPDATE SET amount=amount+1
-    """, (
-        user_id,
-        item_id
-    ))
+    """, (user_id, item_id))
 
     con.commit()
     con.close()
@@ -521,15 +466,8 @@ def buy_item(user_id, item_id):
     bonus = 0
 
     if item_id == "mystery":
-        bonus = random.randint(
-            100,
-            800
-        )
-
-        add_coins(
-            user_id,
-            bonus
-        )
+        bonus = random.randint(100, 800)
+        add_coins(user_id, bonus)
 
     return True, bonus
 
@@ -539,37 +477,31 @@ def buy_item(user_id, item_id):
 # =========================================================
 
 ACHIEVEMENTS = {
-
     "first_game": (
         "🎮 Первый шаг",
         "Сыграть первую игру",
         50
     ),
-
     "ten_wins": (
         "🏆 Победитель",
         "Одержать 10 побед",
         200
     ),
-
     "fifty_games": (
         "🔥 Ветеран",
         "Сыграть 50 игр",
         500
     ),
-
     "streak_7": (
         "🔥 Неделя",
         "Получить streak 7",
         300
     ),
-
     "rich": (
         "💰 Богач",
         "Накопить 5000 Coins",
         1000
     ),
-
     "level_10": (
         "⭐ Level 10",
         "Достичь 10 уровня",
@@ -579,7 +511,6 @@ ACHIEVEMENTS = {
 
 
 def check_achievements(user_id):
-
     user = get_user(user_id)
 
     if not user:
@@ -592,24 +523,12 @@ def check_achievements(user_id):
     level = user[5]
 
     conditions = {
-
-        "first_game":
-            games >= 1,
-
-        "ten_wins":
-            wins >= 10,
-
-        "fifty_games":
-            games >= 50,
-
-        "streak_7":
-            streak >= 7,
-
-        "rich":
-            coins >= 5000,
-
-        "level_10":
-            level >= 10,
+        "first_game": games >= 1,
+        "ten_wins": wins >= 10,
+        "fifty_games": games >= 50,
+        "streak_7": streak >= 7,
+        "rich": coins >= 5000,
+        "level_10": level >= 10,
     }
 
     con = get_db()
@@ -625,8 +544,7 @@ def check_achievements(user_id):
         cur.execute("""
             SELECT 1
             FROM achievements
-            WHERE user_id=?
-              AND achievement_id=?
+            WHERE user_id=? AND achievement_id=?
         """, (
             user_id,
             achievement_id
@@ -635,9 +553,7 @@ def check_achievements(user_id):
         if cur.fetchone():
             continue
 
-        reward = ACHIEVEMENTS[
-            achievement_id
-        ][2]
+        reward = ACHIEVEMENTS[achievement_id][2]
 
         cur.execute("""
             INSERT INTO achievements (
@@ -660,10 +576,7 @@ def check_achievements(user_id):
         ))
 
         unlocked.append(
-            (
-                achievement_id,
-                reward
-            )
+            (achievement_id, reward)
         )
 
     con.commit()
@@ -677,7 +590,6 @@ def check_achievements(user_id):
 # =========================================================
 
 QUESTS = {
-
     "play3": (
         "🎮 Новичок дня",
         "Сыграть 3 игры",
@@ -686,7 +598,6 @@ QUESTS = {
         100,
         30
     ),
-
     "play7": (
         "🔥 Активный игрок",
         "Сыграть 7 игр",
@@ -695,7 +606,6 @@ QUESTS = {
         200,
         60
     ),
-
     "win2": (
         "🏆 Охотник",
         "Одержать 2 победы",
@@ -704,7 +614,6 @@ QUESTS = {
         150,
         40
     ),
-
     "win5": (
         "👑 Чемпион",
         "Одержать 5 побед",
@@ -717,28 +626,20 @@ QUESTS = {
 
 
 def quest_progress(user_id, quest):
-
     user = get_user(user_id)
 
     if not user:
         return 0
 
-    kind = quest[2]
-    target = quest[3]
-
-    if kind == "games":
+    if quest[2] == "games":
         value = user[10]
     else:
         value = user[11]
 
-    return min(
-        value or 0,
-        target
-    )
+    return min(value or 0, quest[3])
 
 
 def quest_claimed(user_id, quest_id):
-
     con = get_db()
     cur = con.cursor()
 
@@ -746,8 +647,8 @@ def quest_claimed(user_id, quest_id):
         SELECT 1
         FROM quest_claims
         WHERE user_id=?
-          AND quest_id=?
-          AND quest_date=?
+        AND quest_id=?
+        AND quest_date=?
     """, (
         user_id,
         quest_id,
@@ -762,33 +663,21 @@ def quest_claimed(user_id, quest_id):
 
 
 def claim_quest(user_id, quest_id):
-
     if quest_id not in QUESTS:
         return False, "Задание не найдено."
 
     quest = QUESTS[quest_id]
 
-    progress = quest_progress(
-        user_id,
-        quest
-    )
-
-    target = quest[3]
-
-    if progress < target:
+    if quest_progress(user_id, quest) < quest[3]:
         return False, "Задание ещё не выполнено."
 
-    if quest_claimed(
-        user_id,
-        quest_id
-    ):
+    if quest_claimed(user_id, quest_id):
         return False, "Награда уже получена."
 
     con = get_db()
     cur = con.cursor()
 
     try:
-
         cur.execute("""
             INSERT INTO quest_claims (
                 user_id,
@@ -817,10 +706,8 @@ def claim_quest(user_id, quest_id):
         con.commit()
 
     except sqlite3.IntegrityError:
-
         con.rollback()
         con.close()
-
         return False, "Награда уже получена."
 
     con.close()
@@ -836,122 +723,102 @@ def claim_quest(user_id, quest_id):
 # =========================================================
 
 def main_menu():
-
     return InlineKeyboardMarkup([
-
         [
             InlineKeyboardButton(
                 "🎮 Игры",
                 callback_data="games"
             ),
-
             InlineKeyboardButton(
                 "🤖 AI",
                 callback_data="ai"
-            ),
+            )
         ],
-
         [
             InlineKeyboardButton(
                 "👤 Профиль",
                 callback_data="profile"
             ),
-
             InlineKeyboardButton(
                 "🎁 Бонус",
                 callback_data="daily"
-            ),
+            )
         ],
-
         [
             InlineKeyboardButton(
                 "📋 Задания",
                 callback_data="quests"
             ),
-
             InlineKeyboardButton(
                 "🛒 Магазин",
                 callback_data="shop"
-            ),
+            )
         ],
-
         [
             InlineKeyboardButton(
                 "🎒 Инвентарь",
                 callback_data="inventory"
             ),
-
             InlineKeyboardButton(
                 "🏅 Достижения",
                 callback_data="achievements"
-            ),
+            )
         ],
-
         [
             InlineKeyboardButton(
                 "🏆 Coins",
                 callback_data="rating"
             ),
-
             InlineKeyboardButton(
                 "⭐ XP",
                 callback_data="xprating"
-            ),
-        ],
-
+            )
+        ]
     ])
 
 
 def games_menu():
-
     return InlineKeyboardMarkup([
-
         [
             InlineKeyboardButton(
                 "🎯 Угадай число",
                 callback_data="guess"
             )
         ],
-
         [
             InlineKeyboardButton(
                 "✂️ Камень / Бумага / Ножницы",
                 callback_data="rps"
             )
         ],
-
         [
             InlineKeyboardButton(
                 "🎲 Кубик",
                 callback_data="dice"
             )
         ],
-
         [
             InlineKeyboardButton(
                 "⚡ Реакция",
                 callback_data="reaction"
             )
         ],
-
         [
             InlineKeyboardButton(
                 "🧠 Быстрый выбор",
                 callback_data="quick"
             )
         ],
-
         [
             InlineKeyboardButton(
                 "⬅️ Главное меню",
                 callback_data="main"
             )
-        ],
+        ]
     ])
 
 
 def back_button(target="main"):
-
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
@@ -961,148 +828,12 @@ def back_button(target="main"):
         ]
     ])
 
+
 # =========================================================
-# AI
+# AI COMMAND
 # =========================================================
 
 async def ai_command(
-
-# =========================================================
-# AI CHAT MODE
-# =========================================================
-
-async def ai_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-
-    user = query.from_user
-
-    if is_banned(user.id):
-        await query.edit_message_text(
-            "⛔ Твой доступ к боту заблокирован."
-        )
-        return
-
-    ensure_user(user)
-
-    context.user_data["ai_mode"] = True
-
-    await query.edit_message_text(
-        """
-🤖 <b>NEXORA AI</b>
-
-AI режим включён.
-
-Напиши мне любой вопрос 👇
-
-Например:
-
-💬 Расскажи интересный факт
-💬 Объясни фотосинтез
-💬 Помоги с Python
-💬 Придумай идею для игры
-
-Я отвечу тебе прямо здесь.
-
-Чтобы выйти из AI, нажми кнопку ниже.
-""",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    "⬅️ Выйти из AI",
-                    callback_data="main"
-                )
-            ]
-        ])
-    )
-
-
-async def ai_message(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    if not context.user_data.get("ai_mode"):
-        return
-
-    user = update.effective_user
-
-    if is_banned(user.id):
-        await update.message.reply_text(
-            "⛔ Твой доступ к боту заблокирован."
-        )
-        return
-
-    ensure_user(user)
-
-    prompt = update.message.text.strip()
-
-    if not prompt:
-        return
-
-    try:
-
-        # Показываем пользователю, что AI думает.
-        thinking_message = await update.message.reply_text(
-            "🤖 Думаю..."
-        )
-
-        response = client.responses.create(
-            model="gpt-5.6",
-            instructions=(
-                "Ты NEXORA AI — дружелюбный AI-помощник "
-                "в Telegram-боте. "
-                "Отвечай понятно, полезно и кратко. "
-                "Отвечай на языке пользователя."
-            ),
-            input=prompt
-        )
-
-        answer = response.output_text
-
-        if not answer:
-            answer = "❌ AI не смог сформировать ответ."
-
-        try:
-            await thinking_message.delete()
-        except Exception:
-            pass
-
-        # Telegram ограничивает размер сообщения.
-        max_length = 4000
-
-        for i in range(0, len(answer), max_length):
-
-            await update.message.reply_text(
-                answer[i:i + max_length],
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton(
-                            "⬅️ Выйти из AI",
-                            callback_data="main"
-                        )
-                    ]
-                ])
-            )
-
-    except Exception as e:
-
-        print(
-            "AI CHAT ERROR:",
-            repr(e)
-        )
-
-        await update.message.reply_text(
-            """
-❌ <b>Ошибка AI</b>
-
-Не удалось получить ответ.
-
-Проверь OPENAI_API_KEY на Render.
-""",
-            parse_mode="HTML"
-        )
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
@@ -1134,6 +865,9 @@ async def ai_message(
 
         answer = response.output_text
 
+        if not answer:
+            answer = "❌ AI не смог сформировать ответ."
+
         await update.message.reply_text(
             f"🤖 <b>NEXORA AI</b>\n\n{answer}",
             parse_mode="HTML"
@@ -1143,18 +877,19 @@ async def ai_message(
         print("AI ERROR:", repr(e))
 
         await update.message.reply_text(
-            "❌ Не удалось получить ответ от AI."
+            "❌ Не удалось получить ответ от AI.\n\n"
+            "Проверь OPENAI_API_KEY на Render."
         )
+
 
 # =========================================================
 # AI BUTTON
 # =========================================================
 
-    async def ai_button(
+async def ai_button(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
     query = update.callback_query
     user = query.from_user
 
@@ -1199,11 +934,14 @@ AI режим включён.
     )
 
 
+# =========================================================
+# AI MESSAGE
+# =========================================================
+
 async def ai_message(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
     if not context.user_data.get("ai_mode"):
         return
 
@@ -1223,19 +961,12 @@ async def ai_message(
         return
 
     try:
-
         thinking = await update.message.reply_text(
             "🤖 Думаю..."
         )
 
         response = client.responses.create(
-            model="gpt-5.6",
-            instructions=(
-                "Ты NEXORA AI. "
-                "Ты дружелюбный помощник Telegram-бота. "
-                "Отвечай понятно и полезно. "
-                "Отвечай на языке пользователя."
-            ),
+            model="gpt-5-mini",
             input=prompt
         )
 
@@ -1249,21 +980,22 @@ async def ai_message(
         if not answer:
             answer = "❌ AI не дал ответ."
 
-        await update.message.reply_text(
-            f"🤖 <b>NEXORA AI</b>\n\n{answer}",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "⬅️ Выйти из AI",
-                        callback_data="main"
-                    )
-                ]
-            ])
-        )
+        max_length = 4000
+
+        for i in range(0, len(answer), max_length):
+            await update.message.reply_text(
+                answer[i:i + max_length],
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ Выйти из AI",
+                            callback_data="main"
+                        )
+                    ]
+                ])
+            )
 
     except Exception as e:
-
         print("AI CHAT ERROR:", repr(e))
 
         await update.message.reply_text(
@@ -1280,31 +1012,28 @@ async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
     user = update.effective_user
 
     if is_banned(user.id):
-
         await update.message.reply_text(
             "⛔ Твой доступ к боту заблокирован."
         )
-
         return
 
     ensure_user(user)
 
-    data = get_user(
-        user.id
-    )
+    context.user_data["ai_mode"] = False
+
+    data = get_user(user.id)
 
     await update.message.reply_text(
-
         f"""
 🔥 <b>NEXORA</b>
 
 Привет, <b>{user.first_name}</b>! 👋
 
 🎮 Мини-игры
+🤖 AI
 ⭐ XP и уровни
 🪙 Coins
 🎁 Daily
@@ -1320,9 +1049,7 @@ async def start(
 ✨ XP: <b>{data[4]}</b>
 🔥 Streak: <b>{data[8]}</b>
 """,
-
         parse_mode="HTML",
-
         reply_markup=main_menu()
     )
 
@@ -1335,9 +1062,7 @@ async def my_id(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
     await update.message.reply_text(
-
         f"""
 🆔 <b>Твой Telegram ID</b>
 
@@ -1346,7 +1071,6 @@ async def my_id(
 Скопируй этот ID и вставь его
 в ADMIN_IDS в bot.py.
 """,
-
         parse_mode="HTML"
     )
 
@@ -1359,29 +1083,22 @@ async def callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
     query = update.callback_query
-
     user = query.from_user
     user_id = user.id
 
-    # Важно:
-    # старые/просроченные callback-запросы
-    # не должны ломать работу бота.
     try:
         await query.answer()
     except Exception:
         pass
 
     if is_banned(user_id):
-
         try:
             await query.edit_message_text(
                 "⛔ Твой доступ к боту заблокирован."
             )
         except Exception:
             pass
-
         return
 
     ensure_user(user)
@@ -1393,12 +1110,7 @@ async def callback(
     # =====================================================
 
     if action == "ai":
-
-        await ai_button(
-            update,
-            context
-        )
-
+        await ai_button(update, context)
         return
 
     # =====================================================
@@ -1406,11 +1118,11 @@ async def callback(
     # =====================================================
 
     if action == "main":
+        context.user_data["ai_mode"] = False
 
         data = get_user(user_id)
 
         await query.edit_message_text(
-
             f"""
 🏠 <b>NEXORA</b>
 
@@ -1421,48 +1133,37 @@ async def callback(
 
 Выбирай раздел 👇
 """,
-
             parse_mode="HTML",
-
             reply_markup=main_menu()
         )
+        return
 
     # =====================================================
     # GAMES
     # =====================================================
 
-    elif action == "games":
-
+    if action == "games":
         await query.edit_message_text(
-
             """
 🎮 <b>ЦЕНТР ИГР</b>
 
 Выбирай игру 👇
 """,
-
             parse_mode="HTML",
-
             reply_markup=games_menu()
         )
+        return
 
     # =====================================================
     # GUESS
     # =====================================================
 
-    elif action == "guess":
+    if action == "guess":
+        number = random.randint(1, 5)
 
-        number = random.randint(
-            1,
-            5
-        )
-
-        context.user_data[
-            "guess_number"
-        ] = number
+        context.user_data["guess_number"] = number
 
         await query.edit_message_text(
-
             """
 🎯 <b>УГАДАЙ ЧИСЛО</b>
 
@@ -1470,53 +1171,27 @@ async def callback(
 
 Выбирай 👇
 """,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
-                    InlineKeyboardButton(
-                        "1️⃣",
-                        callback_data="guess_1"
-                    ),
-
-                    InlineKeyboardButton(
-                        "2️⃣",
-                        callback_data="guess_2"
-                    ),
-
-                    InlineKeyboardButton(
-                        "3️⃣",
-                        callback_data="guess_3"
-                    ),
-
-                    InlineKeyboardButton(
-                        "4️⃣",
-                        callback_data="guess_4"
-                    ),
-
-                    InlineKeyboardButton(
-                        "5️⃣",
-                        callback_data="guess_5"
-                    ),
+                    InlineKeyboardButton("1️⃣", callback_data="guess_1"),
+                    InlineKeyboardButton("2️⃣", callback_data="guess_2"),
+                    InlineKeyboardButton("3️⃣", callback_data="guess_3"),
+                    InlineKeyboardButton("4️⃣", callback_data="guess_4"),
+                    InlineKeyboardButton("5️⃣", callback_data="guess_5")
                 ],
-
                 [
                     InlineKeyboardButton(
                         "⬅️ Игры",
                         callback_data="games"
                     )
                 ]
-
             ])
         )
+        return
 
-    elif action.startswith("guess_"):
-
-        chosen = int(
-            action.split("_")[1]
-        )
+    if action.startswith("guess_"):
+        chosen = int(action.split("_")[1])
 
         number = context.user_data.pop(
             "guess_number",
@@ -1524,27 +1199,16 @@ async def callback(
         )
 
         if number is None:
-
             await query.edit_message_text(
                 "❌ Эта игра уже закончилась.",
-                reply_markup=back_button(
-                    "games"
-                )
+                reply_markup=back_button("games")
             )
-
             return
 
         if chosen == number:
+            reward = random.randint(40, 80)
 
-            reward = random.randint(
-                40,
-                80
-            )
-
-            add_coins(
-                user_id,
-                reward
-            )
+            add_coins(user_id, reward)
 
             level_up = add_xp(
                 user_id,
@@ -1557,138 +1221,99 @@ async def callback(
             )
 
             text = (
-
                 "🎉 <b>ПОБЕДА!</b>\n\n"
-
                 f"Число: <b>{number}</b>\n\n"
-
                 f"🪙 +{reward} Coins\n"
                 "✨ +30 XP"
             )
 
             if level_up:
-                text += (
-                    "\n\n🎉 <b>НОВЫЙ УРОВЕНЬ!</b>"
-                )
+                text += "\n\n🎉 <b>НОВЫЙ УРОВЕНЬ!</b>"
 
         else:
-
-            add_xp(
-                user_id,
-                10
-            )
-
-            register_game(
-                user_id
-            )
+            add_xp(user_id, 10)
+            register_game(user_id)
 
             text = (
-
                 "😢 <b>Не угадал!</b>\n\n"
-
-                f"Правильное число: "
-                f"<b>{number}</b>\n\n"
-
+                f"Правильное число: <b>{number}</b>\n\n"
                 "✨ +10 XP"
             )
 
-        unlocked = check_achievements(
-            user_id
-        )
+        unlocked = check_achievements(user_id)
 
         if unlocked:
-            text += (
-                "\n\n🏅 "
-                "<b>Новое достижение!</b>"
-            )
+            text += "\n\n🏅 <b>Новое достижение!</b>"
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🎯 Ещё раз",
                         callback_data="guess"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🎮 Игры",
                         callback_data="games"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🏠 Меню",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
     # RPS
     # =====================================================
 
-    elif action == "rps":
-
+    if action == "rps":
         await query.edit_message_text(
-
             """
 ✂️ <b>КАМЕНЬ / БУМАГА / НОЖНИЦЫ</b>
 
 Выбирай:
 """,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🪨 Камень",
                         callback_data="rps_rock"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "📄 Бумага",
                         callback_data="rps_paper"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "✂️ Ножницы",
                         callback_data="rps_scissors"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "⬅️ Игры",
                         callback_data="games"
                     )
                 ]
-
             ])
         )
+        return
 
-    elif action.startswith("rps_"):
-
-        player = action.replace(
-            "rps_",
-            ""
-        )
+    if action.startswith("rps_"):
+        player = action.replace("rps_", "")
 
         choices = [
             "rock",
@@ -1696,88 +1321,41 @@ async def callback(
             "scissors"
         ]
 
-        bot_choice = random.choice(
-            choices
-        )
+        bot_choice = random.choice(choices)
 
         names = {
-
-            "rock":
-                "🪨 Камень",
-
-            "paper":
-                "📄 Бумага",
-
-            "scissors":
-                "✂️ Ножницы",
+            "rock": "🪨 Камень",
+            "paper": "📄 Бумага",
+            "scissors": "✂️ Ножницы"
         }
 
         if player == bot_choice:
-
             result = "🤝 <b>Ничья!</b>"
-
-            add_xp(
-                user_id,
-                10
-            )
-
-            register_game(
-                user_id
-            )
+            add_xp(user_id, 10)
+            register_game(user_id)
 
         elif (
-            (
-                player == "rock"
-                and bot_choice == "scissors"
-            )
+            (player == "rock" and bot_choice == "scissors")
             or
-            (
-                player == "paper"
-                and bot_choice == "rock"
-            )
+            (player == "paper" and bot_choice == "rock")
             or
-            (
-                player == "scissors"
-                and bot_choice == "paper"
-            )
+            (player == "scissors" and bot_choice == "paper")
         ):
-
             result = "🎉 <b>Победа!</b>"
 
-            add_coins(
-                user_id,
-                30
-            )
-
-            add_xp(
-                user_id,
-                25
-            )
-
-            register_game(
-                user_id,
-                True
-            )
+            add_coins(user_id, 30)
+            add_xp(user_id, 25)
+            register_game(user_id, True)
 
         else:
-
             result = "😢 <b>Поражение!</b>"
 
-            add_xp(
-                user_id,
-                5
-            )
+            add_xp(user_id, 5)
+            register_game(user_id)
 
-            register_game(
-                user_id
-            )
-
-        check_achievements(
-            user_id
-        )
+        check_achievements(user_id)
 
         await query.edit_message_text(
-
             f"""
 ✂️ <b>РЕЗУЛЬТАТ</b>
 
@@ -1786,102 +1364,60 @@ async def callback(
 
 {result}
 """,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🔄 Ещё раз",
                         callback_data="rps"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🎮 Игры",
                         callback_data="games"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🏠 Меню",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
     # DICE
     # =====================================================
 
-    elif action == "dice":
-
-        player = random.randint(
-            1,
-            6
-        )
-
-        bot_roll = random.randint(
-            1,
-            6
-        )
+    if action == "dice":
+        player = random.randint(1, 6)
+        bot_roll = random.randint(1, 6)
 
         if player > bot_roll:
-
             result = "🎉 <b>Победа!</b>"
 
-            add_coins(
-                user_id,
-                40
-            )
-
-            add_xp(
-                user_id,
-                25
-            )
-
-            register_game(
-                user_id,
-                True
-            )
+            add_coins(user_id, 40)
+            add_xp(user_id, 25)
+            register_game(user_id, True)
 
         elif player == bot_roll:
-
             result = "🤝 <b>Ничья!</b>"
 
-            add_xp(
-                user_id,
-                10
-            )
-
-            register_game(
-                user_id
-            )
+            add_xp(user_id, 10)
+            register_game(user_id)
 
         else:
-
             result = "😢 <b>Поражение!</b>"
 
-            add_xp(
-                user_id,
-                5
-            )
+            add_xp(user_id, 5)
+            register_game(user_id)
 
-            register_game(
-                user_id
-            )
-
-        check_achievements(
-            user_id
-        )
+        check_achievements(user_id)
 
         await query.edit_message_text(
-
             f"""
 🎲 <b>КУБИК</b>
 
@@ -1890,54 +1426,40 @@ async def callback(
 
 {result}
 """,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🎲 Ещё раз",
                         callback_data="dice"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🎮 Игры",
                         callback_data="games"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🏠 Меню",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
     # REACTION
     # =====================================================
 
-    elif action == "reaction":
+    if action == "reaction":
+        correct = random.randint(1, 3)
 
-        correct = random.randint(
-            1,
-            3
-        )
+        context.user_data["reaction"] = correct
 
-        context.user_data[
-            "reaction"
-        ] = correct
-
-        # Ответ НЕ показываем пользователю.
-        # Нужно выбрать правильную кнопку самому.
         await query.edit_message_text(
-
             """
 ⚡ <b>РЕАКЦИЯ</b>
 
@@ -1946,43 +1468,34 @@ async def callback(
 
 Выбирай быстро 👇
 """,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "1️⃣",
                         callback_data="reaction_1"
                     ),
-
                     InlineKeyboardButton(
                         "2️⃣",
                         callback_data="reaction_2"
                     ),
-
                     InlineKeyboardButton(
                         "3️⃣",
                         callback_data="reaction_3"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "⬅️ Игры",
                         callback_data="games"
                     )
                 ]
-
             ])
         )
+        return
 
-    elif action.startswith("reaction_"):
-
-        chosen = int(
-            action.split("_")[1]
-        )
+    if action.startswith("reaction_"):
+        chosen = int(action.split("_")[1])
 
         correct = context.user_data.pop(
             "reaction",
@@ -1990,27 +1503,16 @@ async def callback(
         )
 
         if correct is None:
-
             await query.edit_message_text(
                 "❌ Эта игра уже закончилась.",
-                reply_markup=back_button(
-                    "games"
-                )
+                reply_markup=back_button("games")
             )
-
             return
 
         if chosen == correct:
+            reward = random.randint(25, 60)
 
-            reward = random.randint(
-                25,
-                60
-            )
-
-            add_coins(
-                user_id,
-                reward
-            )
+            add_coins(user_id, reward)
 
             level_up = add_xp(
                 user_id,
@@ -2023,97 +1525,66 @@ async def callback(
             )
 
             text = (
-
                 "⚡ <b>ОТЛИЧНАЯ РЕАКЦИЯ!</b>\n\n"
-
-                f"Правильный ответ: "
-                f"<b>{correct}</b>\n\n"
-
+                f"Правильный ответ: <b>{correct}</b>\n\n"
                 f"🪙 +{reward} Coins\n"
                 "✨ +20 XP"
             )
 
             if level_up:
-                text += (
-                    "\n\n🎉 <b>НОВЫЙ УРОВЕНЬ!</b>"
-                )
+                text += "\n\n🎉 <b>НОВЫЙ УРОВЕНЬ!</b>"
 
         else:
-
-            add_xp(
-                user_id,
-                5
-            )
-
-            register_game(
-                user_id
-            )
+            add_xp(user_id, 5)
+            register_game(user_id)
 
             text = (
-
                 "😅 <b>Не получилось!</b>\n\n"
-
-                f"Правильный ответ: "
-                f"<b>{correct}</b>\n\n"
-
+                f"Правильный ответ: <b>{correct}</b>\n\n"
                 "✨ +5 XP"
             )
 
-        check_achievements(
-            user_id
-        )
+        check_achievements(user_id)
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "⚡ Ещё раз",
                         callback_data="reaction"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🎮 Игры",
                         callback_data="games"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🏠 Меню",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
-    # QUICK CHOICE
+    # QUICK
     # =====================================================
 
-    elif action == "quick":
-
+    if action == "quick":
         correct = random.choice([
             "red",
             "blue",
             "green"
         ])
 
-        context.user_data[
-            "quick"
-        ] = correct
+        context.user_data["quick"] = correct
 
-        # Цвет показываем, затем игрок должен выбрать его.
-        # Здесь ответ действительно отображается перед выбором,
-        # поэтому игра больше похожа на проверку памяти.
         color_name = {
             "red": "🔴 КРАСНЫЙ",
             "blue": "🔵 СИНИЙ",
@@ -2121,7 +1592,6 @@ async def callback(
         }[correct]
 
         await query.edit_message_text(
-
             f"""
 🧠 <b>БЫСТРЫЙ ВЫБОР</b>
 
@@ -2131,48 +1601,38 @@ async def callback(
 
 Теперь выбери его 👇
 """,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🔴 Красный",
                         callback_data="quick_red"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🔵 Синий",
                         callback_data="quick_blue"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🟢 Зелёный",
                         callback_data="quick_green"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "⬅️ Игры",
                         callback_data="games"
                     )
                 ]
-
             ])
         )
+        return
 
-    elif action.startswith("quick_"):
-
-        chosen = action.replace(
-            "quick_",
-            ""
-        )
+    if action.startswith("quick_"):
+        chosen = action.replace("quick_", "")
 
         correct = context.user_data.pop(
             "quick",
@@ -2180,27 +1640,16 @@ async def callback(
         )
 
         if correct is None:
-
             await query.edit_message_text(
                 "❌ Эта игра уже закончилась.",
-                reply_markup=back_button(
-                    "games"
-                )
+                reply_markup=back_button("games")
             )
-
             return
 
         if chosen == correct:
+            reward = random.randint(35, 75)
 
-            reward = random.randint(
-                35,
-                75
-            )
-
-            add_coins(
-                user_id,
-                reward
-            )
+            add_coins(user_id, reward)
 
             level_up = add_xp(
                 user_id,
@@ -2213,136 +1662,91 @@ async def callback(
             )
 
             text = (
-
                 "🧠 <b>ОТЛИЧНО!</b>\n\n"
-
-                f"Правильный цвет: "
-                f"<b>{correct}</b>\n\n"
-
+                f"Правильный цвет: <b>{correct}</b>\n\n"
                 f"🪙 +{reward} Coins\n"
                 "✨ +35 XP"
             )
 
             if level_up:
-                text += (
-                    "\n\n🎉 <b>НОВЫЙ УРОВЕНЬ!</b>"
-                )
+                text += "\n\n🎉 <b>НОВЫЙ УРОВЕНЬ!</b>"
 
         else:
-
-            add_xp(
-                user_id,
-                5
-            )
-
-            register_game(
-                user_id
-            )
+            add_xp(user_id, 5)
+            register_game(user_id)
 
             text = (
-
                 "😅 <b>Не угадал!</b>\n\n"
-
-                f"Правильный цвет: "
-                f"<b>{correct}</b>\n\n"
-
+                f"Правильный цвет: <b>{correct}</b>\n\n"
                 "✨ +5 XP"
             )
 
-        check_achievements(
-            user_id
-        )
+        check_achievements(user_id)
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🧠 Ещё раз",
                         callback_data="quick"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🎮 Игры",
                         callback_data="games"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🏠 Меню",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
     # DAILY
     # =====================================================
 
-    elif action == "daily":
-
-        success, reward, streak = claim_daily(
-            user_id
-        )
+    if action == "daily":
+        success, reward, streak = claim_daily(user_id)
 
         if success:
-
             text = (
-
                 "🎁 <b>ЕЖЕДНЕВНЫЙ БОНУС!</b>\n\n"
-
                 f"🪙 +{reward} Coins\n"
                 f"🔥 Streak: <b>{streak}</b>"
             )
-
         else:
-
             text = (
-
                 "🎁 <b>БОНУС УЖЕ ПОЛУЧЕН</b>\n\n"
-
                 f"🔥 Streak: <b>{streak}</b>\n\n"
-
                 "Возвращайся завтра!"
             )
 
-        check_achievements(
-            user_id
-        )
+        check_achievements(user_id)
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=back_button()
         )
+        return
 
     # =====================================================
     # QUESTS
     # =====================================================
 
-    elif action == "quests":
-
-        text = (
-            "📋 <b>ЕЖЕДНЕВНЫЕ ЗАДАНИЯ</b>\n\n"
-        )
-
+    if action == "quests":
+        text = "📋 <b>ЕЖЕДНЕВНЫЕ ЗАДАНИЯ</b>\n\n"
         buttons = []
 
         for quest_id, quest in QUESTS.items():
-
             name = quest[0]
             description = quest[1]
             target = quest[3]
@@ -2369,56 +1773,37 @@ async def callback(
                 f"{name}\n"
                 f"▫️ {description}\n"
                 f"▫️ Прогресс: <b>{status}</b>\n"
-                f"▫️ 🪙 {reward} + "
-                f"✨ {xp_reward} XP\n\n"
+                f"▫️ 🪙 {reward} + ✨ {xp_reward} XP\n\n"
             )
 
-            if (
-                progress >= target
-                and not claimed
-            ):
-
+            if progress >= target and not claimed:
                 buttons.append([
-
                     InlineKeyboardButton(
                         f"🎁 Забрать {name}",
-                        callback_data=(
-                            f"claim_{quest_id}"
-                        )
+                        callback_data=f"claim_{quest_id}"
                     )
-
                 ])
 
         buttons.append([
-
             InlineKeyboardButton(
                 "⬅️ Назад",
                 callback_data="main"
             )
-
         ])
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
-            reply_markup=InlineKeyboardMarkup(
-                buttons
-            )
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
+        return
 
     # =====================================================
     # CLAIM QUEST
     # =====================================================
 
-    elif action.startswith("claim_"):
-
-        quest_id = action.replace(
-            "claim_",
-            ""
-        )
+    if action.startswith("claim_"):
+        quest_id = action.replace("claim_", "")
 
         success, result = claim_quest(
             user_id,
@@ -2435,80 +1820,63 @@ async def callback(
         except Exception:
             pass
 
-        await query.edit_message_text(
-
-            (
+        if success:
+            text = (
                 "🎉 <b>НАГРАДА ПОЛУЧЕНА!</b>\n\n"
                 f"{result}"
-                if success
-                else f"❌ {result}"
-            ),
-
-            parse_mode="HTML",
-
-            reply_markup=back_button(
-                "quests"
             )
+        else:
+            text = f"❌ {result}"
+
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=back_button("quests")
         )
+        return
 
     # =====================================================
     # SHOP
     # =====================================================
 
-    elif action == "shop":
-
+    if action == "shop":
         buttons = []
 
         for item_id, item in SHOP.items():
-
             name = item[0]
             price = item[1]
 
             buttons.append([
-
                 InlineKeyboardButton(
                     f"{name} — {price} 🪙",
-                    callback_data=(
-                        f"buy_{item_id}"
-                    )
+                    callback_data=f"buy_{item_id}"
                 )
-
             ])
 
         buttons.append([
-
             InlineKeyboardButton(
                 "⬅️ Назад",
                 callback_data="main"
             )
-
         ])
 
         await query.edit_message_text(
-
             """
 🛒 <b>NEXORA SHOP</b>
 
 Выбирай предмет 👇
 """,
-
             parse_mode="HTML",
-
-            reply_markup=InlineKeyboardMarkup(
-                buttons
-            )
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
+        return
 
     # =====================================================
     # BUY
     # =====================================================
 
-    elif action.startswith("buy_"):
-
-        item_id = action.replace(
-            "buy_",
-            ""
-        )
+    if action.startswith("buy_"):
+        item_id = action.replace("buy_", "")
 
         success, bonus = buy_item(
             user_id,
@@ -2516,7 +1884,6 @@ async def callback(
         )
 
         if success:
-
             text = (
                 "✅ <b>ПОКУПКА УСПЕШНА!</b>\n\n"
                 f"{SHOP[item_id][0]}"
@@ -2527,45 +1894,37 @@ async def callback(
                     f"\n\n🎁 Mystery Box:\n"
                     f"🪙 +{bonus}"
                 )
-
         else:
-
             text = (
                 "❌ <b>Не удалось купить.</b>\n\n"
                 "Возможно, недостаточно Coins."
             )
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🛒 Магазин",
                         callback_data="shop"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "🏠 Меню",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
     # INVENTORY
     # =====================================================
 
-    elif action == "inventory":
-
+    if action == "inventory":
         con = get_db()
         cur = con.cursor()
 
@@ -2573,48 +1932,36 @@ async def callback(
             SELECT item_id, amount
             FROM inventory
             WHERE user_id=?
-        """, (
-            user_id,
-        ))
+        """, (user_id,))
 
         items = cur.fetchall()
 
         con.close()
 
-        text = (
-            "🎒 <b>ИНВЕНТАРЬ</b>\n\n"
-        )
+        text = "🎒 <b>ИНВЕНТАРЬ</b>\n\n"
 
         if not items:
-
             text += "Пока пусто."
-
         else:
-
             for item_id, amount in items:
-
                 if item_id in SHOP:
-
                     text += (
                         f"{SHOP[item_id][0]} "
                         f"× <b>{amount}</b>\n"
                     )
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=back_button()
         )
+        return
 
     # =====================================================
     # ACHIEVEMENTS
     # =====================================================
 
-    elif action == "achievements":
-
+    if action == "achievements":
         con = get_db()
         cur = con.cursor()
 
@@ -2622,9 +1969,7 @@ async def callback(
             SELECT achievement_id
             FROM achievements
             WHERE user_id=?
-        """, (
-            user_id,
-        ))
+        """, (user_id,))
 
         unlocked = {
             row[0]
@@ -2633,12 +1978,9 @@ async def callback(
 
         con.close()
 
-        text = (
-            "🏅 <b>ДОСТИЖЕНИЯ</b>\n\n"
-        )
+        text = "🏅 <b>ДОСТИЖЕНИЯ</b>\n\n"
 
         for achievement_id, data in ACHIEVEMENTS.items():
-
             name = data[0]
             description = data[1]
             reward = data[2]
@@ -2656,23 +1998,18 @@ async def callback(
             )
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=back_button()
         )
+        return
 
     # =====================================================
     # PROFILE
     # =====================================================
 
-    elif action == "profile":
-
-        user_data = get_user(
-            user_id
-        )
+    if action == "profile":
+        user_data = get_user(user_id)
 
         bar, current_xp = xp_bar(
             user_data[4]
@@ -2682,10 +2019,7 @@ async def callback(
         wins = user_data[7]
 
         winrate = (
-            round(
-                wins / games * 100,
-                1
-            )
+            round(wins / games * 100, 1)
             if games
             else 0
         )
@@ -2697,7 +2031,6 @@ async def callback(
         )
 
         await query.edit_message_text(
-
             f"""
 👤 <b>ПРОФИЛЬ</b>
 
@@ -2722,18 +2055,16 @@ async def callback(
 
 🔥 Streak: <b>{user_data[8]}</b>
 """,
-
             parse_mode="HTML",
-
             reply_markup=back_button()
         )
+        return
 
     # =====================================================
     # COINS RATING
     # =====================================================
 
-    elif action == "rating":
-
+    if action == "rating":
         con = get_db()
         cur = con.cursor()
 
@@ -2748,18 +2079,11 @@ async def callback(
 
         con.close()
 
-        medals = [
-            "🥇",
-            "🥈",
-            "🥉"
-        ]
+        medals = ["🥇", "🥈", "🥉"]
 
-        text = (
-            "🏆 <b>ТОП ПО COINS</b>\n\n"
-        )
+        text = "🏆 <b>ТОП ПО COINS</b>\n\n"
 
         for index, player in enumerate(players):
-
             name = player[0]
             coins = player[1]
 
@@ -2770,50 +2094,40 @@ async def callback(
             )
 
             text += (
-                f"{prefix} "
-                f"<b>{name}</b> — "
+                f"{prefix} <b>{name}</b> — "
                 f"🪙 {coins}\n"
             )
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "⭐ Топ XP",
                         callback_data="xprating"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "⬅️ Назад",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
     # =====================================================
     # XP RATING
     # =====================================================
 
-    elif action == "xprating":
-
+    if action == "xprating":
         con = get_db()
         cur = con.cursor()
 
         cur.execute("""
-            SELECT
-                first_name,
-                xp,
-                level
+            SELECT first_name, xp, level
             FROM users
             ORDER BY xp DESC
             LIMIT 10
@@ -2823,18 +2137,11 @@ async def callback(
 
         con.close()
 
-        medals = [
-            "🥇",
-            "🥈",
-            "🥉"
-        ]
+        medals = ["🥇", "🥈", "🥉"]
 
-        text = (
-            "⭐ <b>ТОП ПО XP</b>\n\n"
-        )
+        text = "⭐ <b>ТОП ПО XP</b>\n\n"
 
         for index, player in enumerate(players):
-
             name = player[0]
             xp = player[1]
             level = player[2]
@@ -2846,36 +2153,29 @@ async def callback(
             )
 
             text += (
-                f"{prefix} "
-                f"<b>{name}</b>\n"
-                f"⭐ Level {level} | "
-                f"✨ {xp} XP\n\n"
+                f"{prefix} <b>{name}</b>\n"
+                f"⭐ Level {level} | ✨ {xp} XP\n\n"
             )
 
         await query.edit_message_text(
-
             text,
-
             parse_mode="HTML",
-
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "🏆 Топ Coins",
                         callback_data="rating"
                     )
                 ],
-
                 [
                     InlineKeyboardButton(
                         "⬅️ Назад",
                         callback_data="main"
                     )
                 ]
-
             ])
         )
+        return
 
 
 # =========================================================
@@ -2890,19 +2190,13 @@ async def admin(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     await update.message.reply_text(
-
         """
 👑 <b>NEXORA ADMIN PANEL</b>
 
@@ -2920,67 +2214,51 @@ async def admin(
 
 🆔 /id
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN STATS
-# =====================================================
+# =========================================================
 
 async def stats(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     con = get_db()
     cur = con.cursor()
 
-    cur.execute(
-        "SELECT COUNT(*) FROM users"
-    )
-
+    cur.execute("SELECT COUNT(*) FROM users")
     users = cur.fetchone()[0]
 
-    cur.execute(
-        "SELECT COUNT(*) FROM banned"
-    )
-
+    cur.execute("SELECT COUNT(*) FROM banned")
     bans = cur.fetchone()[0]
 
     cur.execute(
         "SELECT COALESCE(SUM(coins), 0) FROM users"
     )
-
     coins = cur.fetchone()[0]
 
     cur.execute(
         "SELECT COALESCE(SUM(games), 0) FROM users"
     )
-
     games = cur.fetchone()[0]
 
     cur.execute(
         "SELECT COALESCE(SUM(wins), 0) FROM users"
     )
-
     wins = cur.fetchone()[0]
 
     con.close()
 
     await update.message.reply_text(
-
         f"""
 📊 <b>СТАТИСТИКА NEXORA</b>
 
@@ -2992,28 +2270,22 @@ async def stats(
 🎮 Всего игр: <b>{games}</b>
 🏆 Всего побед: <b>{wins}</b>
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN USERS
-# =====================================================
+# =========================================================
 
 async def users_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     con = get_db()
@@ -3035,15 +2307,9 @@ async def users_command(
 
     con.close()
 
-    text = (
-        "👥 <b>ПОЛЬЗОВАТЕЛИ</b>\n\n"
-    )
+    text = "👥 <b>ПОЛЬЗОВАТЕЛИ</b>\n\n"
 
-    for index, user in enumerate(
-        users,
-        start=1
-    ):
-
+    for index, user in enumerate(users, start=1):
         uid = user[0]
         name = user[1]
         username = user[2]
@@ -3057,9 +2323,7 @@ async def users_command(
         )
 
         if username:
-            text += (
-                f"🔗 @{username}\n"
-            )
+            text += f"🔗 @{username}\n"
 
         text += "\n"
 
@@ -3069,296 +2333,198 @@ async def users_command(
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN GIVE
-# =====================================================
+# =========================================================
 
 async def give(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     if len(context.args) != 2:
-
         await update.message.reply_text(
             "/give ID сумма"
         )
-
         return
 
     try:
-
-        user_id = int(
-            context.args[0]
-        )
-
-        amount = int(
-            context.args[1]
-        )
-
+        user_id = int(context.args[0])
+        amount = int(context.args[1])
     except ValueError:
-
         await update.message.reply_text(
             "❌ ID и сумма должны быть числами."
         )
-
         return
 
     if amount <= 0:
-
         await update.message.reply_text(
             "❌ Сумма должна быть больше 0."
         )
-
         return
 
-    user = get_user(
-        user_id
-    )
-
-    if not user:
-
+    if not get_user(user_id):
         await update.message.reply_text(
             "❌ Пользователь не найден."
         )
-
         return
 
-    add_coins(
-        user_id,
-        amount
-    )
+    add_coins(user_id, amount)
 
     await update.message.reply_text(
-
         f"""
 ✅ <b>Coins выданы</b>
 
 👤 ID: <code>{user_id}</code>
 🪙 +{amount}
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN TAKE
-# =====================================================
+# =========================================================
 
 async def take(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     if len(context.args) != 2:
-
         await update.message.reply_text(
             "/take ID сумма"
         )
-
         return
 
     try:
-
-        user_id = int(
-            context.args[0]
-        )
-
-        amount = int(
-            context.args[1]
-        )
-
+        user_id = int(context.args[0])
+        amount = int(context.args[1])
     except ValueError:
-
         await update.message.reply_text(
             "❌ ID и сумма должны быть числами."
         )
-
         return
 
     if amount <= 0:
-
         await update.message.reply_text(
             "❌ Сумма должна быть больше 0."
         )
-
         return
 
-    user = get_user(
-        user_id
-    )
-
-    if not user:
-
+    if not get_user(user_id):
         await update.message.reply_text(
             "❌ Пользователь не найден."
         )
-
         return
 
-    add_coins(
-        user_id,
-        -amount
-    )
+    add_coins(user_id, -amount)
 
     await update.message.reply_text(
-
         f"""
 ✅ <b>Coins сняты</b>
 
 👤 ID: <code>{user_id}</code>
 🪙 -{amount}
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN SETCOINS
-# =====================================================
+# =========================================================
 
 async def setcoins_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     if len(context.args) != 2:
-
         await update.message.reply_text(
             "/setcoins ID сумма"
         )
-
         return
 
     try:
-
-        user_id = int(
-            context.args[0]
-        )
-
-        amount = int(
-            context.args[1]
-        )
-
+        user_id = int(context.args[0])
+        amount = int(context.args[1])
     except ValueError:
-
         await update.message.reply_text(
             "❌ ID и сумма должны быть числами."
         )
-
         return
 
     if amount < 0:
-
         await update.message.reply_text(
             "❌ Сумма не может быть отрицательной."
         )
-
         return
 
-    if not set_coins(
-        user_id,
-        amount
-    ):
-
+    if not set_coins(user_id, amount):
         await update.message.reply_text(
             "❌ Пользователь не найден."
         )
-
         return
 
     await update.message.reply_text(
-
         f"""
 ✅ <b>Баланс изменён</b>
 
 👤 ID: <code>{user_id}</code>
 🪙 Новый баланс: <b>{amount}</b>
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN BAN
-# =====================================================
+# =========================================================
 
 async def ban_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     if len(context.args) != 1:
-
         await update.message.reply_text(
             "/ban ID"
         )
-
         return
 
     try:
-
-        user_id = int(
-            context.args[0]
-        )
-
+        user_id = int(context.args[0])
     except ValueError:
-
         await update.message.reply_text(
             "❌ ID должен быть числом."
         )
-
         return
 
     if user_id in ADMIN_IDS:
-
         await update.message.reply_text(
             "❌ Нельзя заблокировать администратора."
         )
-
         return
 
     con = get_db()
@@ -3367,64 +2533,47 @@ async def ban_command(
     cur.execute("""
         INSERT OR IGNORE INTO banned(user_id)
         VALUES (?)
-    """, (
-        user_id,
-    ))
+    """, (user_id,))
 
     con.commit()
     con.close()
 
     await update.message.reply_text(
-
         f"""
 🔒 <b>Пользователь заблокирован</b>
 
 ID: <code>{user_id}</code>
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ADMIN UNBAN
-# =====================================================
+# =========================================================
 
 async def unban_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     if len(context.args) != 1:
-
         await update.message.reply_text(
             "/unban ID"
         )
-
         return
 
     try:
-
-        user_id = int(
-            context.args[0]
-        )
-
+        user_id = int(context.args[0])
     except ValueError:
-
         await update.message.reply_text(
             "❌ ID должен быть числом."
         )
-
         return
 
     con = get_db()
@@ -3441,55 +2590,41 @@ async def unban_command(
     con.close()
 
     if changed:
-
         await update.message.reply_text(
             "✅ Пользователь разблокирован."
         )
-
     else:
-
         await update.message.reply_text(
             "ℹ️ Пользователь не был заблокирован."
         )
 
 
-# =====================================================
+# =========================================================
 # ADMIN BROADCAST
-# =====================================================
+# =========================================================
 
 async def broadcast(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-
-    if not is_admin(
-        update.effective_user.id
-    ):
-
+    if not is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ Нет доступа."
         )
-
         return
 
     if not context.args:
-
         await update.message.reply_text(
             "/broadcast текст"
         )
-
         return
 
-    message = " ".join(
-        context.args
-    )
+    message = " ".join(context.args)
 
     con = get_db()
     cur = con.cursor()
 
-    cur.execute(
-        "SELECT user_id FROM users"
-    )
+    cur.execute("SELECT user_id FROM users")
 
     user_ids = [
         row[0]
@@ -3511,7 +2646,6 @@ async def broadcast(
             continue
 
         try:
-
             await context.bot.send_message(
                 chat_id=user_id,
                 text=message
@@ -3520,39 +2654,31 @@ async def broadcast(
             sent += 1
 
         except Exception:
-
             failed += 1
 
-        # Небольшая пауза
-        # чтобы не отправлять всё одновременно.
         await asyncio.sleep(0.05)
 
     await update.message.reply_text(
-
         f"""
 📢 <b>РАССЫЛКА ЗАКОНЧЕНА</b>
 
 ✅ Отправлено: <b>{sent}</b>
 ❌ Ошибок: <b>{failed}</b>
 """,
-
         parse_mode="HTML"
     )
 
 
-# =====================================================
+# =========================================================
 # ERROR HANDLER
-# =====================================================
+# =========================================================
 
 async def error_handler(
     update,
     context
 ):
-
     error = context.error
 
-    # Старый callback.
-    # Просто игнорируем, чтобы он не засорял консоль.
     if "Query is too old" in str(error):
         return
 
@@ -3560,7 +2686,8 @@ async def error_handler(
         "BOT ERROR:",
         repr(error)
     )
-    
+
+
 # =========================================================
 # RENDER WEB SERVER
 # =========================================================
@@ -3579,7 +2706,12 @@ def health():
 
 
 def run_web_server():
-    port = int(os.environ.get("PORT", 10000))
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
 
     web_app.run(
         host="0.0.0.0",
@@ -3587,12 +2719,11 @@ def run_web_server():
     )
 
 
-# =====================================================
+# =========================================================
 # MAIN
-# =====================================================
+# =========================================================
 
 def main():
-
     init_db()
 
     web_thread = threading.Thread(
@@ -3607,9 +2738,10 @@ def main():
         .token(TOKEN)
         .build()
     )
-    # -------------------------
+
+    # =====================================================
     # USER COMMANDS
-    # -------------------------
+    # =====================================================
 
     application.add_handler(
         CommandHandler(
@@ -3626,15 +2758,15 @@ def main():
     )
 
     application.add_handler(
-    CommandHandler(
-        "ai",
-        ai_command
+        CommandHandler(
+            "ai",
+            ai_command
+        )
     )
-)
 
-    # -------------------------
+    # =====================================================
     # ADMIN COMMANDS
-    # -------------------------
+    # =====================================================
 
     application.add_handler(
         CommandHandler(
@@ -3699,9 +2831,9 @@ def main():
         )
     )
 
-    # -------------------------
-    # TEXT / AI
-    # -------------------------
+    # =====================================================
+    # AI TEXT
+    # =====================================================
 
     application.add_handler(
         MessageHandler(
@@ -3710,9 +2842,9 @@ def main():
         )
     )
 
-    # -------------------------
+    # =====================================================
     # CALLBACK BUTTONS
-    # -------------------------
+    # =====================================================
 
     application.add_handler(
         CallbackQueryHandler(
@@ -3720,9 +2852,9 @@ def main():
         )
     )
 
-    # -------------------------
+    # =====================================================
     # ERRORS
-    # -------------------------
+    # =====================================================
 
     application.add_error_handler(
         error_handler
