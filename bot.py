@@ -28,6 +28,7 @@ from telegram.ext import (
 
 TOKEN = os.getenv("TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6")
 
 DB_FILE = "nexora.db"
 
@@ -1386,7 +1387,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("AI KEY LENGTH:", len(OPENAI_API_KEY) if OPENAI_API_KEY else 0)
 
         response = ai_client.responses.create(
-            model="gpt-5.6",
+            model=OPENAI_MODEL,
             input=(
                 "Ты — Nexora AI, помощник Telegram-бота NEXORA. "
                 "Отвечай понятно, дружелюбно и на русском языке.\n\n"
