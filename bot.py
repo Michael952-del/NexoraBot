@@ -909,6 +909,16 @@ async def ai_command(
         )
         return
 
+    # Если OpenAI API не настроен или нет баланса
+    if client is None:
+        await update.message.reply_text(
+            "🤖 <b>NEXORA AI</b>\n\n"
+            "⚠️ AI сейчас временно недоступен.\n"
+            "Основные функции NEXORA работают нормально.",
+            parse_mode="HTML"
+        )
+        return
+
     prompt = " ".join(context.args)
 
     try:
@@ -916,8 +926,9 @@ async def ai_command(
             "🤖 Думаю..."
         )
 
-        response = client.responses.create(
-            model=AI_MODEL,
+        response = await asyncio.to_thread(
+            client.responses.create,
+            model=OPENAI_MODEL,
             instructions=(
                 "Ты NEXORA AI — дружелюбный помощник "
                 "в Telegram-боте. "
@@ -951,55 +962,10 @@ async def ai_command(
             pass
 
         await update.message.reply_text(
-            "❌ Не удалось получить ответ от AI.\n\n"
-            "Проверь OPENAI_API_KEY и OPENAI_MODEL "
-            "на Render."
+            "⚠️ NEXORA AI сейчас недоступен.\n\n"
+            "🎮 Игры, профиль, магазин и остальные "
+            "функции бота продолжают работать."
         )
-
-
-async def ai_button(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-    query = update.callback_query
-    user = query.from_user
-
-    if is_banned(user.id):
-        await query.edit_message_text(
-            "⛔ Твой доступ к боту заблокирован."
-        )
-        return
-
-    ensure_user(user)
-
-    context.user_data["ai_mode"] = True
-
-    await query.edit_message_text(
-        """
-🤖 <b>NEXORA AI</b>
-
-AI режим включён.
-
-Напиши любой вопрос 👇
-
-Например:
-
-💬 Расскажи интересный факт
-💬 Объясни Python
-💬 Помоги с домашним заданием
-💬 Придумай идею для игры
-
-Я отвечу прямо здесь.
-
-Чтобы выйти из AI, нажми кнопку ниже.
-""",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    "⬅️ Выйти из AI",
-                    callback_data="main"
-                )
             ]
         ])
     )
