@@ -26,7 +26,7 @@ from telegram.ext import (
 # НАСТРОЙКИ
 # =========================================================
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 DB_FILE = "nexora.db"
