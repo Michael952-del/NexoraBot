@@ -1378,7 +1378,7 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = ai_client.responses.create(
-            model="gpt-5-mini",
+            model="gpt-5.6-luna",
             input=(
                 "Ты — Nexora AI, дружелюбный помощник внутри "
                 "Telegram-бота NEXORA. Отвечай понятно, кратко "
