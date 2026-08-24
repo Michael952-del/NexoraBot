@@ -1076,18 +1076,23 @@ async def ai_message(
                 ])
             )
 
-except Exception as e:
+    except Exception as e:
+        print("====================================")
+        print("OPENAI ERROR:")
+        print(repr(e))
+        print("====================================")
 
-    print("====================================")
-    print("OPENAI ERROR:")
-    print(repr(e))
-    print("====================================")
+        if thinking:
+            try:
+                await thinking.delete()
+            except Exception:
+                pass
 
-    await update.message.reply_text(
-        "❌ Ошибка AI.\n\n"
-        f"<code>{str(e)[:1000]}</code>",
-        parse_mode="HTML"
-    )
+        await update.message.reply_text(
+            "❌ Ошибка AI.\n\n"
+            f"<code>{str(e)[:1000]}</code>",
+            parse_mode="HTML"
+        )
 
 
 # =========================================================
