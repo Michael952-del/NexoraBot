@@ -1360,9 +1360,13 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not ai_client:
         context.user_data["waiting_ai"] = False
+
         await update.message.reply_text(
-            "⚠️ OPENAI_API_KEY не настроен."
+            "❌ OPENAI_API_KEY не найден в Render."
         )
+
+        print("AI ERROR: OPENAI_API_KEY is None")
+
         return True
 
     prompt = update.message.text
@@ -1377,20 +1381,25 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
+        print("AI: отправляю запрос в OpenAI...")
+        print("AI KEY EXISTS:", bool(OPENAI_API_KEY))
+        print("AI KEY LENGTH:", len(OPENAI_API_KEY) if OPENAI_API_KEY else 0)
+
         response = ai_client.responses.create(
-            model="gpt-5.6-luna",
+            model="gpt-5.6",
             input=(
-                "Ты — Nexora AI, дружелюбный помощник внутри "
-                "Telegram-бота NEXORA. Отвечай понятно, кратко "
-                "и полезно на русском языке.\n\n"
-                f"Пользователь спрашивает:\n{prompt}"
+                "Ты — Nexora AI, помощник Telegram-бота NEXORA. "
+                "Отвечай понятно, дружелюбно и на русском языке.\n\n"
+                f"Сообщение пользователя:\n{prompt}"
             )
         )
 
         answer = response.output_text
 
+        print("AI: ответ получен")
+
         if not answer:
-            answer = "Не удалось получить ответ."
+            answer = "OpenAI не вернул текст ответа."
 
         await wait_message.edit_text(
             f"🤖 <b>Nexora AI:</b>\n\n{answer}",
@@ -1398,11 +1407,16 @@ async def handle_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        print("AI ERROR:", repr(e))
+        print("================================")
+        print("AI ERROR:")
+        print(type(e).__name__)
+        print(str(e))
+        print("================================")
 
         await wait_message.edit_text(
-            "❌ Не удалось получить ответ от AI.\n\n"
-            "Проверь OPENAI_API_KEY и настройки OpenAI."
+            "❌ Ошибка Nexora AI.\n\n"
+            "Открой Render → Logs и посмотри строку "
+            "AI ERROR."
         )
 
     return True
